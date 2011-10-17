@@ -18,8 +18,8 @@ function [coord,labels] = niak_read_tags(file_name)
 % OUTPUTS:
 %
 % COORD
-%       (matrix N*3) COORD(I,:) is the 3D-coordinates of the I point in the
-%       tag file.
+%       (matrix N x 3*V) COORD(I,:) is the 3D-coordinates of the I point in
+%       the tag file, where V is the number of volumes.
 %
 % LABELS
 %       (cell of string) LABELS{I} is the label of the Ith tag.
@@ -66,15 +66,24 @@ hf = fopen(file_name);
 tab = fread(hf, Inf, 'uint8=>char')';
 fclose(hf);
 
+noVol = regexp(tab,'Volumes = (\d+);','tokens','once');
+noVol = str2double(noVol{1});
+
 tab = niak_string2lines(tab);
-tab = tab(5:end);
+start = find(strcmp('Points =', tab), 1) + 1;
+tab = tab(start:end);
 
 coord = zeros([length(tab) 3]);
 labels = cell([length(tab) 1]);
 
 for num_l = 1:length(tab)
-    line_tab = niak_string2words(tab{num_l});    
-    coord(num_l,:) = str2num(char(line_tab(1:3)));
-    ind_num = findstr(tab{num_l},'"');
-    labels{num_l} = tab{num_l}(ind_num(1)+1:ind_num(2)-1);
+    line_tab = niak_string2words(tab{num_l});
+    for v = 1:noVol
+      lim = (1:3) + (v-1) * 3;
+      coord(num_l,lim) = str2double(line_tab(lim));
+    end
+    ind_num = strfind(tab{num_l},'"');
+    if length(ind_num) > 1
+      labels{num_l} = tab{num_l}(ind_num(1)+1:ind_num(2)-1);
+    end
 end
