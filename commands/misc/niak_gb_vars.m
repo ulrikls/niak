@@ -127,7 +127,7 @@ end
 
 %% What is the operating system ?
 comp = computer;
-tag_unix = {'SOL2','GLNX','unix','linux'};
+tag_unix = {'SOL2','GLNX','unix','linux','MACI64'};
 tag_windaub = {'PCWIN','windows'};
 
 if max(niak_find_str_cell(comp,tag_unix))>0
