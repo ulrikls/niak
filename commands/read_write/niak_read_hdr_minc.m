@@ -70,7 +70,7 @@ niak_gb_vars
 list_vars = {'image','image-min','image-max','time','xspace','yspace','zspace','acquisition','patient','study'};
 
 %% Checking for existence of the file
-if ~exist(file_name)
+if ~exist(file_name,'file')
     error('niak:read: File %s not found',file_name)
 end
 
@@ -84,7 +84,7 @@ end
 
 
 %% Reading the header with 'mincheader'
-[flag,str_header] = system(cat(2,'mincheader ',file_name));
+[~,str_header] = system(cat(2,'mincheader ',file_name));
 
 cell_header = niak_string2lines(str_header);
 
@@ -154,7 +154,8 @@ while ~isempty(cell_header)&&~flag_end
                     var_name = '';
                 end
 
-                if ismember(var_name,list_vars) % The name of the variable is a classic one. Let's parse the attributes (flag_OK=1).
+                if length(var_name) > 1
+%                if ismember(var_name,list_vars) % The name of the variable is a classic one. Let's parse the attributes (flag_OK=1).
                     flag_OK = 1;
                     if strcmp(var_name,'image-min')
                         var_name = 'image_min';
