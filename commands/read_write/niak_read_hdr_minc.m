@@ -156,15 +156,19 @@ while ~isempty(cell_header)&&~flag_end
 
                 if length(var_name) > 1
 %                if ismember(var_name,list_vars) % The name of the variable is a classic one. Let's parse the attributes (flag_OK=1).
-                    flag_OK = 1;
+                    flag_OK = true;
                     if strcmp(var_name,'image-min')
                         var_name = 'image_min';
                     elseif strcmp(var_name,'image-max')
                         var_name = 'image_max';
                     end
-                    setfield(hdr.details,var_name,{});
+                    try
+                      setfield(hdr.details,var_name,{});
+                    catch ME
+                      flag_OK = false;
+                    end
                 else % The name of the variable is weird (probably a dicom header or something of the kind). Let's skip it (flag_OK = 0).
-                    flag_OK = 0>0;
+                    flag_OK = false;
                 end
 
             else % If the line does not define a variable, then it defines the attribute of a variable
