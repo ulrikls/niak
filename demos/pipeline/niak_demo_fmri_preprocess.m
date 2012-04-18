@@ -22,7 +22,7 @@ function [pipeline,opt] = niak_demo_fmri_preprocess(path_demo,opt)
 %           process the pipeline.
 %
 %       FLAG_REGION_GROWING
-%           (boolean, default true) if this flag is true, the region growing
+%           (boolean, default false) if this flag is true, the region growing
 %           step of the pipeline will be performed.
 %
 %       SIZE_OUTPUT 
@@ -101,7 +101,7 @@ end
 default_psom.path_logs = '';
 gb_name_structure = 'opt';
 gb_list_fields    = {'flag_region_growing' , 'size_output'     , 'flag_test' , 'psom'       };
-gb_list_defaults  = {true                  , 'quality_control' , false       , default_psom };
+gb_list_defaults  = {false                 , 'quality_control' , false       , default_psom };
 niak_set_defaults
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -124,23 +124,23 @@ switch format_demo
     
     case 'minc1' % If data are in minc1 format
                 
-        files_in.subject1.anat             = cat(2,path_demo,filesep,'anat_subject1.mnc.gz');        
-        files_in.subject1.fmri.session1{1} = cat(2,path_demo,filesep,'func_motor_subject1.mnc.gz');
-        files_in.subject1.fmri.session1{2} = cat(2,path_demo,filesep,'func_rest_subject1.mnc.gz');     
+        files_in.subject1.anat                = cat(2,path_demo,filesep,'anat_subject1.mnc.gz');        
+        files_in.subject1.fmri.session1.motor = cat(2,path_demo,filesep,'func_motor_subject1.mnc.gz');
+        files_in.subject1.fmri.session2.rest  = cat(2,path_demo,filesep,'func_rest_subject1.mnc.gz');     
         
-        files_in.subject2.anat             = cat(2,path_demo,filesep,'anat_subject2.mnc.gz');        
-        files_in.subject2.fmri.session1{1} = cat(2,path_demo,filesep,'func_motor_subject2.mnc.gz');
-        files_in.subject2.fmri.session1{2} = cat(2,path_demo,filesep,'func_rest_subject2.mnc.gz');
+        files_in.subject2.anat                = cat(2,path_demo,filesep,'anat_subject2.mnc.gz');        
+        files_in.subject2.fmri.session1.motor = cat(2,path_demo,filesep,'func_motor_subject2.mnc.gz');
+        files_in.subject2.fmri.session2.rest  = cat(2,path_demo,filesep,'func_rest_subject2.mnc.gz');
         
     case 'minc2' % If data are in minc2 format
         
-        files_in.subject1.anat             = cat(2,path_demo,filesep,'anat_subject1.mnc');        
-        files_in.subject1.fmri.session1{1} = cat(2,path_demo,filesep,'func_motor_subject1.mnc');
-        files_in.subject1.fmri.session1{2} = cat(2,path_demo,filesep,'func_rest_subject1.mnc');          
+        files_in.subject1.anat                = cat(2,path_demo,filesep,'anat_subject1.mnc');        
+        files_in.subject1.fmri.session1.motor = cat(2,path_demo,filesep,'func_motor_subject1.mnc');
+        files_in.subject1.fmri.session2.rest  = cat(2,path_demo,filesep,'func_rest_subject1.mnc');          
         
-        files_in.subject2.anat             = cat(2,path_demo,filesep,'anat_subject2.mnc');        
-        files_in.subject2.fmri.session1{1} = cat(2,path_demo,filesep,'func_motor_subject2.mnc');
-        files_in.subject2.fmri.session1{2} = cat(2,path_demo,filesep,'func_rest_subject2.mnc');
+        files_in.subject2.anat                = cat(2,path_demo,filesep,'anat_subject2.mnc');        
+        files_in.subject2.fmri.session1.motor = cat(2,path_demo,filesep,'func_motor_subject2.mnc');
+        files_in.subject2.fmri.session2.rest  = cat(2,path_demo,filesep,'func_rest_subject2.mnc');
         
     otherwise 
         
@@ -172,6 +172,8 @@ opt.t1_preprocess.nu_correct.arg = '-distance 50'; % Parameter for non-uniformit
 
 % T1-T2 coregistration (niak_brick_anat2func)
 opt.anat2func.init = 'identity'; % The 'center' option usually does more harm than good. Use it only if you have very big misrealignement between the two images (say, > 2 cm).
+opt.tune.subject = 'subject1';
+opt.tune.param.anat2func.init = 'center'; % Just to show case how to specify a different parameter for one subject (here subject1)
 
 % Temporal filtering (niak_brick_time_filter)
 opt.time_filter.hp = 0.01; % Apply a high-pass filter at cut-off frequency 0.01Hz (slow time drifts)

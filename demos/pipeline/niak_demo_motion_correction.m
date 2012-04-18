@@ -1,8 +1,8 @@
-function [pipeline,opt] = niak_demo_pipeline_motion_correction(path_demo,opt)
+function [pipeline,opt,files_out] = niak_demo_motion_correction(path_demo,opt)
 % This is a script to demonstrate the usage of NIAK_PIPELINE_MOTION_CORRECTION
 %
 % SYNTAX:
-% [FILES_IN,FILES_OUT,OPT] = NIAK_DEMO_PIPELINE_MOTION_CORRECTION(PATH_DEMO,OPT)
+% [FILES_IN,FILES_OUT,OPT] = NIAK_DEMO_MOTION_CORRECTION(PATH_DEMO,OPT)
 %
 % _________________________________________________________________________
 % INPUTS:
@@ -25,8 +25,8 @@ function [pipeline,opt] = niak_demo_pipeline_motion_correction(path_demo,opt)
 % COMMENTS:
 %
 % Copyright (c) Pierre Bellec, Centre de recherche de l'institut de 
-% geriatrie de Montreal, Montreal, Canada, 2010.
-% Maintainer : pbellec@criugm.qc.ca
+% geriatrie de Montreal, Montreal, Canada, 2010-2012.
+% Maintainer : pierre.bellec@criugm.qc.ca
 % See licensing information in the code.
 % Keywords : medical imaging, motion correction, fMRI
 
@@ -48,23 +48,24 @@ function [pipeline,opt] = niak_demo_pipeline_motion_correction(path_demo,opt)
 % OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 % THE SOFTWARE.
 
+niak_gb_vars
+
 if nargin>=1
     if ~isempty(path_demo)
         gb_niak_path_demo = path_demo;
     end
 end
-
-niak_gb_vars
+gb_niak_path_demo = niak_full_path(gb_niak_path_demo);
 
 %% In which format is the niak demo ?
 format_demo = 'minc2';
-if exist(cat(2,path_demo,'anat_subject1.mnc'))
+if exist(cat(2,gb_niak_path_demo,'anat_subject1.mnc'))
     format_demo = 'minc2';
-elseif exist(cat(2,path_demo,'anat_subject1.mnc.gz'))
+elseif exist(cat(2,gb_niak_path_demo,'anat_subject1.mnc.gz'))
     format_demo = 'minc1';
-elseif exist(cat(2,path_demo,'anat_subject1.nii'))
+elseif exist(cat(2,gb_niak_path_demo,'anat_subject1.nii'))
     format_demo = 'nii';
-elseif exist(cat(2,path_demo,'anat_subject1.img'))
+elseif exist(cat(2,gb_niak_path_demo,'anat_subject1.img'))
     format_demo = 'analyze';
 end
 
@@ -76,26 +77,26 @@ switch format_demo
         %% The two datasets have actually been acquired in the same
         %% session, but this is just to demonstrate how the procedure works
         %% in general.
-        files_in.session1{1} = cat(2,gb_niak_path_demo,filesep,'func_rest_subject1.mnc');        
-        files_in.session1{2} = cat(2,gb_niak_path_demo,filesep,'func_motor_subject1.mnc');        
-        files_in.session2{1} = cat(2,gb_niak_path_demo,filesep,'func_rest_subject2.mnc');        
-        files_in.session2{2} = cat(2,gb_niak_path_demo,filesep,'func_motor_subject2.mnc');        
+        files_in.session1.rest  = cat(2,gb_niak_path_demo,filesep,'func_rest_subject1.mnc');        
+        files_in.session1.motor = cat(2,gb_niak_path_demo,filesep,'func_motor_subject1.mnc');        
+        files_in.session2.run1  = cat(2,gb_niak_path_demo,filesep,'func_rest_subject2.mnc');        
+        files_in.session2.run2  = cat(2,gb_niak_path_demo,filesep,'func_motor_subject2.mnc');        
         
     case 'minc1'
         
         %% The two datasets have actually been acquired in the same
         %% session, but this is just to demonstrate how the procedure works
         %% in general.
-        files_in.session1{1} = cat(2,gb_niak_path_demo,filesep,'func_rest_subject1.mnc.gz');        
-        files_in.session1{2} = cat(2,gb_niak_path_demo,filesep,'func_motor_subject1.mnc.gz');        
-        files_in.session2{1} = cat(2,gb_niak_path_demo,filesep,'func_rest_subject2.mnc.gz');        
-        files_in.session2{2} = cat(2,gb_niak_path_demo,filesep,'func_motor_subject2.mnc.gz');        
+        files_in.session1.rest  = cat(2,gb_niak_path_demo,filesep,'func_rest_subject1.mnc.gz');        
+        files_in.session1.motor = cat(2,gb_niak_path_demo,filesep,'func_motor_subject1.mnc.gz');        
+        files_in.session2.run1  = cat(2,gb_niak_path_demo,filesep,'func_rest_subject2.mnc.gz');        
+        files_in.session2.run2  = cat(2,gb_niak_path_demo,filesep,'func_motor_subject2.mnc.gz');        
         
     otherwise 
         
         error('niak:demo','%s is an unsupported file format for this demo.',gb_niak_format_demo)
 end
-
-opt.folder_out = [gb_niak_path_demo 'motion_correction_subject1' filesep];
-[pipeline,opt] = niak_pipeline_motion_correction(files_in,opt);
+opt.subject = 'subject12';
+opt.folder_out = [gb_niak_path_demo 'motion_correction_subject12' filesep];
+[pipeline,opt,files_out] = niak_pipeline_motion_correction(files_in,opt);
 
