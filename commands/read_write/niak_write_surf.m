@@ -121,11 +121,11 @@ end
 fprintf(hf, '\n');
 
 % end_indices
-fprintf(hf, ' %g %g %g %g %g %g %g %g\n', 3:3:numel(ssurf.tri));
+fprintf(hf, ' %u %u %u %u %u %u %u %u\n', 3:3:numel(ssurf.tri));
 fprintf(hf, '\n\n');
 
 % indices
-fprintf(hf, ' %g %g %g %g %g %g %g %g\n', ssurf.tri' - 1);
+fprintf(hf, ' %u %u %u %u %u %u %u %u\n', ssurf.tri' - 1);
 fprintf(hf, '\n');
 
 fclose(hf);
