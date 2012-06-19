@@ -1,4 +1,4 @@
-function coord_w = niak_coord_vox2world(coord_v,mat,opt);
+function coord_w = niak_coord_vox2world(coord_v,mat,opt)
 % Convert coordinates in the voxel space into coordinates in the world
 % space. 
 %
@@ -21,7 +21,7 @@ function coord_w = niak_coord_vox2world(coord_v,mat,opt);
 %       (structure, optional) with the following fields :
 %
 %       FLAG_ZERO
-%           (boolean, default false) if FLAG_ZERO is true, voxel 
+%           (boolean, default false) if FLAG_ZERO is false, voxel 
 %           coordinates start from 1 (default behaviour in matlab), 
 %           otherwise they start from 0 (default behaviour in C/C++ or 
 %           MINC).
