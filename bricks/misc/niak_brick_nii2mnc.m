@@ -1,40 +1,35 @@
 function [files_in,files_out,opt] = niak_brick_nii2mnc(files_in,files_out,opt)
-%
-% _________________________________________________________________________
-% SUMMARY NIAK_BRICK_NII2MNC
-%
-% Copy the content of a directory and convert all the nifti files into the 
-% minc format.
+% Convert all the nifti files of a file collection into the minc format.
 %
 % [FILES_IN,FILES_OUT,OPT] = NIAK_BRICK_NII2MNC(FILES_IN,FILES_OUT,OPT)
 %
 % _________________________________________________________________________
-% INPUTS
+% INPUTS:
 %
-%   FILES_IN  
-%       (string) a full path.
+% FILES_IN  
+%   (string) a relative or full path.
 %
-%   FILES_OUT 
-%       (string, default FILES_IN) a full path
+% FILES_OUT 
+%   (string, default FILES_IN) a relative or full path name
 %
-%   OPT   
-%       (structure) with the following fields :
+% OPT   
+%   (structure) with the following fields :
 %
-%       FLAG_RECURSIVE
-%           (boolean, default true) recursively copy subfolders.
+%   FLAG_RECURSIVE
+%      (boolean, default true) recursively copy subfolders.
 %
-%       ARG_NII2MNC
-%           (string, default '') an argument that will be added in
-%           the system call to the NII2MNC function.
+%   ARG_NII2MNC
+%      (string, default '') an argument that will be added in
+%      the system call to the NII2MNC function.
 %
-%       FLAG_VERBOSE 
-%           (boolean, default 1) if the flag is 1, then the function prints 
-%           some infos during the processing.
+%   FLAG_VERBOSE 
+%      (boolean, default 1) if the flag is 1, then the function prints 
+%      some infos during the processing.
 %
-%       FLAG_ZIP
-%           (boolean, default false) if the flag is true, the output minc
-%           files are compressed (see comments below). This is useful with
-%           MINC1 file format.
+%   FLAG_ZIP
+%      (boolean, default false) if the flag is true, the output minc
+%      files are compressed (see comments below). This is useful with
+%      MINC1 file format.
 %
 % _________________________________________________________________________
 % OUTPUTS
@@ -94,6 +89,9 @@ gb_name_structure = 'opt';
 gb_list_fields = {'flag_zip','flag_recursive','flag_verbose','arg_nii2mnc'};
 gb_list_defaults = {false,true,true,''};
 niak_set_defaults
+
+files_in = niak_full_path(files_in);
+files_out = niak_full_path(files_out);
 
 dir_files = dir(files_in);
 

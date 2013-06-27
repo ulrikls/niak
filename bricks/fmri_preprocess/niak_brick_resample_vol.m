@@ -43,7 +43,7 @@ function [files_in,files_out,opt] = niak_brick_resample_vol(files_in,files_out,o
 %       (structure, optional) has the following fields:
 %
 %       INTERPOLATION 
-%          (string, default 'tricubic') the spatial interpolation method. 
+%          (string, default 'trilinear') the spatial interpolation method. 
 %          Available options : 'trilinear', 'tricubic', 'nearest_neighbour'
 %          ,'sinc'.
 %
@@ -88,10 +88,6 @@ function [files_in,files_out,opt] = niak_brick_resample_vol(files_in,files_out,o
 %       TRANSF_NAME
 %           (string, default TRANSF) the name of the variable for affine 
 %           transfomations in mat files (see comments below).
-%
-%       SUPPRESS_VOL
-%           (string, default 0) for 4D files, the first SUPPRESS_VOL
-%           volumes will be suppressed.
 %
 %       FOLDER_OUT 
 %           (string, default: path of FILES_IN) If present, all default 
@@ -166,8 +162,8 @@ niak_set_defaults
 
 % Setting up options
 gb_name_structure = 'opt';
-gb_list_fields    = { 'flag_skip' , 'suppress_vol' , 'transf_name' , 'interpolation' , 'flag_tfm_space' , 'voxel_size' , 'folder_out' , 'flag_test' , 'flag_invert_transf' , 'flag_verbose' , 'flag_adjust_fov' , 'flag_keep_range' };
-gb_list_defaults  = { 0           , 0              , 'transf'      , 'trilinear'     , 0                , 0            , ''           , 0           , 0                    , 1              , 0                 , 0                 };
+gb_list_fields    = { 'flag_skip' , 'transf_name' , 'interpolation' , 'flag_tfm_space' , 'voxel_size' , 'folder_out' , 'flag_test' , 'flag_invert_transf' , 'flag_verbose' , 'flag_adjust_fov' , 'flag_keep_range' };
+gb_list_defaults  = { 0           , 'transf'      , 'trilinear'     , 0                , 0            , ''           , 0           , 0                    , 1              , 0                 , 0                 };
 niak_set_defaults
 
 if (length(voxel_size)==1)&&(voxel_size~=0)&&(voxel_size~=1)
@@ -179,7 +175,12 @@ if flag_keep_range
 else
     instr_range = '-nokeep_real_range ';
 end
-    
+
+%% Check that the resampling scheme is acceptable
+if ~ismember(opt.interpolation,{'trilinear','tricubic','sinc','nearest_neighbour'})
+    error('%s is an unsupported resampling scheme',opt.interpolation)
+end
+
 %% Generating default ouputs
 [path_f,name_f,ext_f] = niak_fileparts(files_in.source);
 
@@ -405,7 +406,7 @@ if nt1 == 1
     if flag_invert_transf
         instr_resample = [instr_resample ' -invert_transformation'];
     end
-    instr_resample = [instr_resample ' -',interpolation,' -like ',file_target_tmp,' -clobber'];        
+    instr_resample = [instr_resample ' -',interpolation,' -like ',file_target_tmp,' -clobber'];            
     [status,msg] = system(instr_resample);    
     if status~=0
         error(msg);
@@ -426,10 +427,16 @@ else
     file_func_tmp2 = [folder_tmp 'func2.mnc']; % temporary file for output
     file_transf_tmp = [folder_tmp 'transf.xfm']; % temporary file for transform
     [hdr_source,vol_source] = niak_read_vol(files_in.source); % read the source
-    vol_resampled = zeros([nx2,ny2,nz2,nt1-suppress_vol]); % initialize a resampled space
+    if isfield(hdr_source,'extra')
+        extra = hdr_source.extra;
+        hdr_source = rmfield(hdr_source,'extra');
+    else
+        extra = struct();
+    end
+    vol_resampled = zeros([nx2,ny2,nz2,nt1]); % initialize a resampled space
     hdr_source.file_name = file_func_tmp;
     
-    for num_t = min(suppress_vol+1,nt1):nt1
+    for num_t = 1:nt1
         
         if flag_verbose
             fprintf('%i ',num_t)
@@ -469,7 +476,7 @@ else
         end
         
         [hdr_target,vol_tmp] = niak_read_vol(file_func_tmp2);
-        vol_resampled(:,:,:,num_t-suppress_vol) = vol_tmp;
+        vol_resampled(:,:,:,num_t) = vol_tmp;
         
     end
     clear vol_source
@@ -483,6 +490,9 @@ else
     hdr_target.file_name = files_out;
     hdr_target.info.tr = hdr_source.info.tr;
     hdr_target.details.time = hdr_source.details.time;
+    if length(fieldnames(extra))>1
+        hdr_target.extra = extra;
+    end
     niak_write_vol(hdr_target,vol_resampled);    
     
     %% clean the temporary files

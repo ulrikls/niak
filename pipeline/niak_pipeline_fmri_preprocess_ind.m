@@ -53,8 +53,17 @@ function [pipeline,opt] = niak_pipeline_fmri_preprocess_ind(files_in,opt)
 %             kept
 %       
 %   TEMPLATE_FMRI
-%       (string, default '<~niak>/template/roi_aal.mnc.gz') a volume that
+%       (string, default '<~niak>/template/roi_aal_3mm.mnc.gz') a volume that
 %       will be used to resample the fMRI datasets. 
+%
+%   TEMPLATE_T1
+%       (string, default 'mni_icbm152_nlin_sym_09a') the template that 
+%       will be used as a target for the coregistration of the T1 image. 
+%       Available choices: 
+%         'mni_icbm152_nlin_asym_09a' : an adult symmetric template 
+%             (18.5 - 43 y.o., 40 iterations of non-linear fit). 
+%         'mni_icbm152_nlin_sym_09a' : an adult asymmetric template 
+%             (18.5 - 43 y.o., 20 iterations of non-linear fit). 
 %
 %   TARGET_SPACE
 %       (string, default 'stereonl') which space will be used to resample
@@ -123,7 +132,11 @@ function [pipeline,opt] = niak_pipeline_fmri_preprocess_ind(files_in,opt)
 %   PVE
 %       (structure) option for the estimation of partial volume effects of 
 %       tissue types (grey matter, white matter, cerbrospinal fluid) on the 
-%       anatomical scan.
+%       anatomical scan. Additional option:
+%
+%       FLAG_SKIP
+%           (boolean, default false) if the flag is true, do not extract 
+%           PVE maps.
 %
 %   ANAT2FUNC 
 %       (structure) options of NIAK_BRICK_ANAT2FUNC (coregistration 
@@ -191,7 +204,7 @@ function [pipeline,opt] = niak_pipeline_fmri_preprocess_ind(files_in,opt)
 %       in the stereotaxic space).
 %
 %       INTERPOLATION 
-%           (string, default 'tricubic') the spatial interpolation method. 
+%           (string, default 'trilinear') the spatial interpolation method. 
 %           Available options : 'trilinear', 'tricubic', 
 %           'nearest_neighbour','sinc'.
 %
@@ -224,6 +237,9 @@ function [pipeline,opt] = niak_pipeline_fmri_preprocess_ind(files_in,opt)
 %       FLAG_GSC 
 %           (boolean, default true) turn on/off global signal correction
 %
+%       FLAG_COMPCOR
+%           (boolean, default false) turn on/off COMPCOR 
+%
 %       FLAG_MOTION_PARAMS 
 %           (boolean, default false) turn on/off the removal of the 6 motion 
 %           parameters + the square of 6 motion parameters.
@@ -236,6 +252,9 @@ function [pipeline,opt] = niak_pipeline_fmri_preprocess_ind(files_in,opt)
 %           (boolean, default 0.95) the % of variance explained by the selected 
 %           PCA components when reducing the dimensionality of motion parameters.
 %
+%       COMPCOR
+%           (structure, default see NIAK_COMPCOR) the OPT argument of NIAK_COMPCOR.
+% 
 %       FLAG_PCA_MOTION 
 %           (boolean, default true) turn on/off the PCA reduction of motion 
 %           parameters.
@@ -272,6 +291,22 @@ function [pipeline,opt] = niak_pipeline_fmri_preprocess_ind(files_in,opt)
 %       FLAG_SKIP
 %           (boolean, default false) if FLAG_SKIP==1, the brick does not do
 %           anything, just copy the input on the output. 
+%
+%   CIVET (structure)
+%       If this field is present, NIAK will not process the T1 image, but
+%       will rather grab the (previously generated) results of the CIVET 
+%       pipeline, i.e. copy/rename them. The following fields need
+%       to be specified :
+%               
+%       FOLDER 
+%          (string) The path of a folder with CIVET results. The field 
+%          ANAT will be ignored in this case.
+%
+%       ID 
+%          (string) the ID associated with SUBJECT in the CIVET results. 
+%
+%       PREFIX 
+%          (string) The prefix used for the database.
 %
 % _________________________________________________________________________
 % OUTPUTS : 
@@ -311,8 +346,8 @@ function [pipeline,opt] = niak_pipeline_fmri_preprocess_ind(files_in,opt)
 %       9.  Estimation of a temporal model of slow time drifts.
 %           See NIAK_BRICK_TIME_FILTER
 %      10.  Regression of confounds (slow time drifts, motion parameters, 
-%           WM average, global signal) and scrubbing of time frames with 
-%           an excessive motion.
+%           WM average, COMPCOR, global signal) preceeded by scrubbing of time frames 
+%           with an excessive motion.
 %           See NIAK_BRICK_REGRESS_CONFOUNDS and OPT.REGRESS_CONFOUNDS
 %      11.  Correction of physiological noise.
 %           See NIAK_PIPELINE_CORSICA and OPT.CORSICA
@@ -385,11 +420,17 @@ end
 files_in = sub_check_format(files_in); % Checking that FILES_IN is in the correct format
 
 %% OPT
-file_template = [gb_niak_path_template filesep 'roi_aal.mnc.gz'];
-list_fields    = { 'target_space' , 'rand_seed' , 'subject' , 'template_fmri' , 'size_output'     , 'folder_out' , 'folder_logs' , 'folder_fmri' , 'folder_anat' , 'folder_qc' , 'folder_intermediate' , 'flag_test' , 'flag_verbose' , 'psom'   , 'slice_timing' , 'motion_correction' , 'qc_motion_correction_ind' , 't1_preprocess' , 'pve'    , 'anat2func' , 'qc_coregister' , 'corsica' , 'time_filter' , 'resample_vol' , 'smooth_vol' , 'region_growing' , 'regress_confounds'};
-list_defaults  = { 'stereonl'     , []          , NaN       , file_template   , 'quality_control' , NaN          , ''            , ''            , ''            , ''          , ''                    , false       , false          , struct() , struct()       , struct()            , struct()                   , struct()        , struct() , struct()    , struct()        , struct()  , struct()      , struct()       , struct()     , struct()         , struct()           };
+file_template = [gb_niak_path_template filesep 'roi_aal_3mm.mnc.gz'];
+list_fields    = { 'civet'           , 'target_space' , 'rand_seed' , 'subject' , 'template_fmri' ,  'template_t1'              , 'size_output'     , 'folder_out' , 'folder_logs' , 'folder_fmri' , 'folder_anat' , 'folder_qc' , 'folder_intermediate' , 'flag_test' , 'flag_verbose' , 'psom'   , 'slice_timing' , 'motion' , 'qc_motion_correction_ind' , 't1_preprocess' , 'pve'    , 'anat2func' , 'qc_coregister' , 'corsica' , 'time_filter' , 'resample_vol' , 'smooth_vol' , 'region_growing' , 'regress_confounds'};
+list_defaults  = { 'gb_niak_omitted' , 'stereonl'     , []          , NaN       , file_template   ,  'mni_icbm152_nlin_sym_09a' , 'quality_control' , NaN          , ''            , ''            , ''            , ''          , ''                    , false       , false          , struct() , struct()       , struct() , struct()                   , struct()        , struct() , struct()    , struct()        , struct()  , struct()      , struct()       , struct()     , struct()         , struct()           };
 opt = psom_struct_defaults(opt,list_fields,list_defaults);
 subject = opt.subject;
+
+if ~ischar(opt.civet)
+    list_fields   = { 'folder' , 'id' , 'prefix' };
+    list_defaults = { NaN      , NaN  , NaN      }; 
+    opt.civet = psom_struct_defaults(opt.civet,list_fields,list_defaults);
+end
 
 if ~ismember(opt.size_output,{'quality_control','all'}) % check that the size of outputs is a valid option
     error(sprintf('%s is an unknown option for OPT.SIZE_OUTPUT. Available options are ''minimum'', ''quality_control'', ''all''',opt.size_output))
@@ -415,6 +456,10 @@ if isempty(opt.folder_intermediate)
     opt.folder_intermediate = [opt.folder_out 'intermediate' filesep subject filesep];
 end
 
+if ~ismember(opt.template_t1,{'mni_icbm152_nlin_sym_09a','mni_icbm152_nlin_asym_09a'})
+    error('%s is an unkown T1 template space',opt.template_t1)
+end
+
 opt.psom.path_logs = opt.folder_logs;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -429,48 +474,84 @@ fmri_s = niak_fmri2struct(fmri,label);
 [path_f,name_f,ext_f] = niak_fileparts(fmri{1});
 
 %% T1 preprocess
-if opt.flag_verbose
-    t1 = clock;
-    fprintf('T1 preprocess (');
-end
-clear job_in job_out job_opt
-job_in                          = files_in.anat;
-job_out.transformation_lin      = [opt.folder_anat 'transf_' subject '_nativet1_to_stereolin.xfm'];
-job_out.transformation_nl       = [opt.folder_anat 'transf_' subject '_stereolin_to_stereonl.xfm'];
-job_out.transformation_nl_grid  = [opt.folder_anat 'transf_' subject '_stereolin_to_stereonl_grid.mnc'];
-job_out.anat_nuc                = [opt.folder_anat 'anat_'   subject '_nuc_nativet1' ext_f];
-job_out.anat_nuc_stereolin      = [opt.folder_anat 'anat_'   subject '_nuc_stereolin' ext_f];
-job_out.anat_nuc_stereonl       = [opt.folder_anat 'anat_'   subject '_nuc_stereonl' ext_f];
-job_out.mask_stereolin          = [opt.folder_anat 'anat_'   subject '_mask_stereolin' ext_f];
-job_out.mask_stereonl           = [opt.folder_anat 'anat_'   subject '_mask_stereonl' ext_f];
-job_out.classify                = [opt.folder_anat 'anat_'   subject '_classify_stereolin' ext_f];
-job_opt                         = opt.t1_preprocess;
-job_opt.folder_out              = opt.folder_anat;
-pipeline = psom_add_job(pipeline,['t1_preprocess_' subject],'niak_brick_t1_preprocess',job_in,job_out,job_opt);
-if opt.flag_verbose        
-    fprintf('%1.2f sec) - ',etime(clock,t1));
+if ischar(opt.civet)
+    if opt.flag_verbose
+        t1 = clock;
+        fprintf('T1 preprocess (');
+    end
+    clear job_in job_out job_opt
+    job_in                          = files_in.anat;
+    job_out.transformation_lin      = [opt.folder_anat 'transf_' subject '_nativet1_to_stereolin.xfm'];
+    job_out.transformation_nl       = [opt.folder_anat 'transf_' subject '_stereolin_to_stereonl.xfm'];
+    job_out.transformation_nl_grid  = [opt.folder_anat 'transf_' subject '_stereolin_to_stereonl_grid.mnc'];
+    job_out.anat_nuc                = [opt.folder_anat 'anat_'   subject '_nuc_nativet1' ext_f];
+    job_out.anat_nuc_stereolin      = [opt.folder_anat 'anat_'   subject '_nuc_stereolin' ext_f];
+    job_out.anat_nuc_stereonl       = [opt.folder_anat 'anat_'   subject '_nuc_stereonl' ext_f];
+    job_out.mask_stereolin          = [opt.folder_anat 'anat_'   subject '_mask_stereolin' ext_f];
+    job_out.mask_stereonl           = [opt.folder_anat 'anat_'   subject '_mask_stereonl' ext_f];
+    job_out.classify                = [opt.folder_anat 'anat_'   subject '_classify_stereolin' ext_f];
+    job_opt                         = opt.t1_preprocess;
+    job_opt.template_t1             = opt.template_t1;
+    job_opt.folder_out              = opt.folder_anat;
+    pipeline = psom_add_job(pipeline,['t1_preprocess_' subject],'niak_brick_t1_preprocess',job_in,job_out,job_opt);
+    if opt.flag_verbose        
+        fprintf('%1.2f sec) - ',etime(clock,t1));
+    end
+    
+    %% PVE
+    if opt.flag_verbose
+        t1 = clock;
+        fprintf('PVE (');
+    end
+    clear job_in job_out job_opt
+    job_in.vol          = pipeline.(['t1_preprocess_' subject]).files_out.anat_nuc_stereolin;
+    job_in.mask         = pipeline.(['t1_preprocess_' subject]).files_out.mask_stereolin;
+    job_in.segmentation = pipeline.(['t1_preprocess_' subject]).files_out.classify;    
+    job_out.pve_wm      = [opt.folder_anat 'anat_' subject '_pve_wm_stereolin'   ext_f];
+    job_out.pve_gm      = [opt.folder_anat 'anat_' subject '_pve_gm_stereolin'   ext_f];
+    job_out.pve_csf     = [opt.folder_anat 'anat_' subject '_pve_csf_stereolin'  ext_f];
+    job_out.pve_disc    = [opt.folder_anat 'anat_' subject '_pve_disc_stereolin' ext_f];
+    job_opt             = opt.pve;
+    job_opt.rand_seed   = opt.rand_seed;
+    if isfield(job_opt,'flag_skip')
+        job_opt = rmfield(job_opt,'flag_skip');
+    end
+    if ~isfield(opt.pve,'flag_skip')||~opt.pve.flag_skip
+        pipeline = psom_add_job(pipeline,['pve_',subject],'niak_brick_pve',job_in,job_out,job_opt);
+    end
+    if opt.flag_verbose        
+        fprintf('%1.2f sec) - ',etime(clock,t1));
+    end
+else
+    % CIVET results have been specified. Copy and rename them
+    if opt.flag_verbose
+        t1 = clock;
+        fprintf('CIVET (');
+    end
+    clear job_in job_out job_opt
+    job_in.civet                    = struct;
+    job_out.transformation_lin      = [opt.folder_anat 'transf_' subject '_nativet1_to_stereolin.xfm'];
+    job_out.transformation_nl       = [opt.folder_anat 'transf_' subject '_stereolin_to_stereonl.xfm'];
+    job_out.transformation_nl_grid  = [opt.folder_anat 'transf_' subject '_stereolin_to_stereonl_grid.mnc'];
+    job_out.anat_nuc                = [opt.folder_anat 'anat_'   subject '_nuc_nativet1' ext_f];
+    job_out.anat_nuc_stereolin     = [opt.folder_anat 'anat_'   subject '_nuc_stereolin' ext_f];
+    job_out.anat_nuc_stereonl      = [opt.folder_anat 'anat_'   subject '_nuc_stereonl' ext_f]; 
+    job_out.mask_stereolin          = [opt.folder_anat 'anat_'   subject '_mask_stereolin' ext_f];
+    job_out.mask_stereonl           = [opt.folder_anat 'anat_'   subject '_mask_stereonl' ext_f];
+    job_out.classify                = [opt.folder_anat 'anat_'   subject '_classify_stereolin' ext_f];
+    job_out.pve_wm                  = [opt.folder_anat 'anat_' subject '_pve_wm_stereolin'   ext_f];
+    job_out.pve_gm                  = [opt.folder_anat 'anat_' subject '_pve_gm_stereolin'   ext_f];
+    job_out.pve_csf                 = [opt.folder_anat 'anat_' subject '_pve_csf_stereolin'  ext_f];
+    job_out.verify                  = [opt.folder_anat 'anat_' subject '_verify.png'];
+    job_opt.civet                   = opt.civet;    
+    job_opt.folder_out              = opt.folder_anat;
+    pipeline = psom_add_job(pipeline,['t1_preprocess_' subject],'niak_brick_civet',job_in,job_out,job_opt);
+    if opt.flag_verbose        
+        fprintf('%1.2f sec) - ',etime(clock,t1));
+    end
 end
 
-%% PVE
-if opt.flag_verbose
-    t1 = clock;
-    fprintf('PVE (');
-end
-clear job_in job_out job_opt
-job_in.vol          = pipeline.(['t1_preprocess_' subject]).files_out.anat_nuc_stereolin;
-job_in.mask         = pipeline.(['t1_preprocess_' subject]).files_out.mask_stereolin;
-job_in.segmentation = pipeline.(['t1_preprocess_' subject]).files_out.classify;
-job_out.pve_wm      = [opt.folder_anat 'anat_' subject '_pve_wm_stereolin'   ext_f];
-job_out.pve_gm      = [opt.folder_anat 'anat_' subject '_pve_gm_stereolin'   ext_f];
-job_out.pve_csf     = [opt.folder_anat 'anat_' subject '_pve_csf_stereolin'  ext_f];
-job_out.pve_disc    = [opt.folder_anat 'anat_' subject '_pve_disc_stereolin' ext_f];
-job_opt             = opt.pve;
-pipeline = psom_add_job(pipeline,['pve_',subject],'niak_brick_pve',job_in,job_out,job_opt);
-if opt.flag_verbose        
-    fprintf('%1.2f sec) - ',etime(clock,t1));
-end
-
-%% slice-timing correction
+%% Slice-timing correction
 if opt.flag_verbose
     t1 = clock;
     fprintf('slice timing (');
@@ -481,6 +562,9 @@ for num_e = 1:length(fmri)
     job_opt            = opt.slice_timing;
     job_opt.folder_out = [opt.folder_intermediate 'slice_timing' filesep];
     job_out            = [job_opt.folder_out filesep 'fmri_' label(num_e).name '_a' ext_f];        
+    if any(strfind(label(num_e).run,'_'))
+        error('The labels of runs should not contain any underscore. I cannot process the run "%s"',label(num_e).run)
+    end
     pipeline = psom_add_job(pipeline,['slice_timing_' label(num_e).name],'niak_brick_slice_timing',job_in,job_out,job_opt);    
     if strcmp(opt.size_output,'quality_control') % Clean-up
         pipeline = psom_add_clean(pipeline,['clean_slice_timing_' label(num_e).name],job_out);        
@@ -502,7 +586,7 @@ for num_e = 1:length(fmri)
 end
 job_in = niak_fmri2struct(job_in,label);
 job_in = job_in.(subject);
-job_opt             = opt.motion_correction;
+job_opt             = opt.motion;
 job_opt.subject     = subject;
 job_opt.flag_test   = true;
 job_opt.folder_out  = [opt.folder_intermediate 'motion_correction',filesep];
@@ -599,7 +683,15 @@ if opt.flag_verbose
 end
 clear job_in job_out job_opt 
 job_in.mask_vent_stereo   = [gb_niak_path_niak 'template' filesep 'roi_ventricle.mnc.gz'];
+switch opt.template_t1
+    case 'mni_icbm152_nlin_sym_09a'
+        job_in.mask_wm_stereo     = [gb_niak_path_niak 'template' filesep 'mni-models_icbm152-nl-2009-1.0' filesep 'mni_icbm152_t1_tal_nlin_sym_09a_mask_pure_wm_2mm.mnc.gz'];
+    case 'mni_icbm152_nlin_asym_09a'
+        job_in.mask_wm_stereo     = [gb_niak_path_niak 'template' filesep 'mni-models_icbm152-nl-2009-1.0' filesep 'mni_icbm152_t1_tal_nlin_asym_09a_mask_pure_wm_2mm.mnc.gz'];
+end
 job_in.mask_stem_stereo   = [gb_niak_path_niak 'template' filesep 'roi_stem.mnc.gz'];
+job_in.mask_brain         = pipeline.(['qc_motion_' subject]).files_out.mask_group;
+job_in.aal                = [gb_niak_path_niak 'template' filesep 'roi_aal.mnc.gz'];
 job_in.functional_space   = pipeline.(['qc_motion_' subject]).files_out.mask_group;
 job_in.transformation_nl  = pipeline.(['t1_preprocess_',subject]).files_out.transformation_nl;
 job_in.segmentation       = pipeline.(['t1_preprocess_' subject]).files_out.classify;
@@ -640,6 +732,7 @@ for num_e = 1:length(fmri)
     clear job_opt job_in job_out
     job_in.fmri         = pipeline.(['resample_' label(num_e).name]).files_out;
     job_in.dc_low       = pipeline.(['time_filter_' label(num_e).name]).files_out.dc_low;
+    job_in.dc_high      = pipeline.(['time_filter_' label(num_e).name]).files_out.dc_high;
     job_in.mask_vent    = pipeline.(['mask_corsica_' subject]).files_out.mask_vent_ind;
     job_in.mask_wm      = pipeline.(['mask_corsica_' subject]).files_out.white_matter_ind;
     job_in.mask_brain   = pipeline.(['qc_motion_' subject]).files_out.mask_group;
@@ -650,11 +743,14 @@ for num_e = 1:length(fmri)
     job_opt.folder_out     = [opt.folder_intermediate 'regress_confounds' filesep];
     job_out.filtered_data  = [job_opt.folder_out filesep 'fmri_' label(num_e).name '_cor' ext_f]; 
     job_out.confounds      = [job_opt.folder_out filesep 'confounds_gs_' label(num_e).name '_cor.mat']; 
-    job_out.scrubbing      = [job_opt.folder_out filesep 'scrubbing_' label(num_e).name '.mat']; 
+    job_out.scrubbing      = [job_opt.folder_out filesep 'scrubbing_' label(num_e).name '.mat'];
+    job_out.compcor_mask   = [job_opt.folder_out filesep 'compcor_mask_' label(num_e).name ext_f]; 
     job_out.qc_wm          = [opt.folder_qc filesep 'regress_confounds' filesep label(num_e).name '_qc_wm_func' opt.target_space ext_f]; 
     job_out.qc_vent        = [opt.folder_qc filesep 'regress_confounds' filesep label(num_e).name '_qc_vent_func' opt.target_space ext_f]; 
     job_out.qc_slow_drift  = [opt.folder_qc filesep 'regress_confounds' filesep label(num_e).name '_qc_slow_drift_func' opt.target_space ext_f]; 
+    job_out.qc_high        = [opt.folder_qc filesep 'regress_confounds' filesep label(num_e).name '_qc_high_func' opt.target_space ext_f];  
     job_out.qc_motion      = [opt.folder_qc filesep 'regress_confounds' filesep label(num_e).name '_qc_motion_func' opt.target_space ext_f]; 
+    job_out.qc_compcor     = [opt.folder_qc filesep 'regress_confounds' filesep label(num_e).name '_qc_compcor_func' opt.target_space ext_f]; 
     job_out.qc_gse         = [opt.folder_qc filesep 'regress_confounds' filesep label(num_e).name '_qc_gse_func' opt.target_space ext_f]; 
     if ~strcmp(job_in.custom_param,'gb_niak_omitted')
         job_out.qc_custom_param = [opt.folder_qc filesep 'regress_confounds' filesep label(num_e).name '_qc_gse_func' opt.target_space ext_f]; 

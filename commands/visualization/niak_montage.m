@@ -46,7 +46,7 @@ function [] = niak_montage(vol,opt)
 %				'jet_rev' a revert jet color map (red for low values, 
 %					blue for high values). Good for representing 
 %					distances.
-%				'hotcold' designed for maps with both positive & 
+%				'hot_cold' designed for maps with both positive & 
 %					negative matrices.					
 %
 %       FWHM 
@@ -106,17 +106,22 @@ function [] = niak_montage(vol,opt)
 
 % Setting up default
 gb_name_structure = 'opt';
-gb_list_fields    = {'type_slice' ,'vol_limits','type_color','fwhm','type_flip','flag_colorbar','nb_rows','nb_columns','voxel_size','comment'};
-gb_list_defaults  = {'axial'      ,[min(vol(:)) max(vol(:))],'jet',0,'rot90',1,0,0,[1 1 1],''};
+gb_list_fields    = {'type_slice' , 'vol_limits'              , 'type_color' , 'fwhm' , 'type_flip' , 'flag_colorbar' , 'nb_rows' , 'nb_columns' , 'voxel_size' , 'comment' };
+gb_list_defaults  = {'axial'      , [min(vol(:)) max(vol(:))] , 'jet'        , 0      , 'rot90'     , 1               , 0         , 0            , [1 1 1]      , ''        };
 niak_set_defaults
 
 switch type_color
-	case 'hot_cold'
-		c1 = hot(128);
-		c1 = c1(1:100,:);
-		c2 = c1(:,[3 2 1]);
-		c= [c2(size(c2,1):-1:1,:) ; c1];
-		colormap(c)   
+	case 'hot_cold'   
+    if (opt.vol_limits(2)>0) && (opt.vol_limits(1)<0)
+        per_hot = opt.vol_limits(2)/(opt.vol_limits(2)-opt.vol_limits(1));
+    elseif opt.vol_limits(2)<=0
+        per_hot = 0;
+    else 
+        per_hot = 1;
+    end
+    c = niak_hot_cold(256,per_hot);    
+    colormap(c)   
+    
 	case 'jet_rev'
 		c = jet(256);
 		c = c(end:-1:1,:);

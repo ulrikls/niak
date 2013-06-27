@@ -8,7 +8,7 @@ function path_name_f = niak_full_path(path_name)
 % INPUTS:
 %
 % PATH_NAME
-%    (string) a relative or absolute path name.
+%    (string, default pwd) a relative or absolute path name.
 %
 % _________________________________________________________________________
 % OUTPUTS:
@@ -46,9 +46,23 @@ function path_name_f = niak_full_path(path_name)
 % OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 % THE SOFTWARE.
 
+if nargin == 0
+    path_name = pwd;
+end
+
 %% convert relative into full path
-if isempty(strfind(path_name,[':' filesep]))&&~strcmp(path_name(1),filesep)
+path_name = strrep(path_name,[filesep filesep],filesep);
+if isempty(strfind(path_name,[':' filesep]))&&~strcmp(path_name(1),filesep)&&~strcmp(path_name(1:min(2,length(path_name))),['.' filesep])&&~strcmp(path_name(1:min(3,length(path_name))),['..' filesep])
     path_name_f = [ pwd filesep path_name ] ;
+elseif strcmp(path_name(1:min(2,length(path_name))),['.' filesep])
+    path_name_f = [pwd filesep path_name(3:end)];
+elseif strcmp(path_name(1:min(3,length(path_name))),['..' filesep])
+    path_name_f = pwd;
+    ind = strfind(path_name_f,filesep);
+    if ~isempty(ind)&&(ind(end)>1)
+        path_name_f = path_name_f(1:(ind(end)-1));
+    end
+    path_name_f = [path_name_f filesep path_name(4:end)];
 else
     path_name_f = path_name;
 end

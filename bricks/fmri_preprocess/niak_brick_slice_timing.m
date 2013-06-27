@@ -20,8 +20,7 @@ function [files_in,files_out,opt] = niak_brick_slice_timing(files_in,files_out,o
 %
 %    SUPPRESS_VOL 
 %        (integer, default 0) the number of volumes that are suppressed 
-%        at the begining and the end of the time series. This can be 
-%        usefull to limit the edges effects in the sinc interpolation.
+%        at the begining of the time series. 
 %
 %    INTERPOLATION
 %        (string, default 'spline') the method for temporal interpolation,
@@ -89,12 +88,22 @@ function [files_in,files_out,opt] = niak_brick_slice_timing(files_in,files_out,o
 %    FLAG_VARIANCE
 %        (boolean, default 1) if FLAG_VARIANCE == 1, the mean and 
 %        variance of the time series at each voxel is preserved.
+%        This behaviour will not apply if FLAG_NU_CORRECT is on.
+%
+%    FLAG_CENTER
+%        (boolean, default false) if the flag is true, the origin of space is 
+%        placed in the center of the field of view.
 %
 %    FLAG_REGULAR
 %        (boolean, default 1) if FLAG_REGULAR == 1, the spacing of all axis 
 %        will be set to regular in MINC files. This is done to avoid bugs in 
 %        latter stage of the analysis (MINCRESAMPLE cannot handle files with 
 %        irregular spacing.
+%
+%    FLAG_EVEN_ODD
+%        (boolean, default 0) if the flag is on, the mean of odd and even slices
+%        will be set to a common values (the grand mean) for each volume. This is 
+%        applied within a brain mask.
 %
 %    FLAG_HISTORY
 %        (boolean, default 0) if FLAG_HISTORY == 1, the brick will preserve 
@@ -104,11 +113,23 @@ function [files_in,files_out,opt] = niak_brick_slice_timing(files_in,files_out,o
 %        the NIAK tools do not set the history consistently, so in any case it 
 %        does not matter to preserve it as it is not accurate. 
 %
+%    FLAG_NU_CORRECT
+%        (boolean, default true) if FLAG_NU_CORRECT == 1, the NU_CORRECT
+%        method is used to correct for non-uniformity of the B0 field.
+%
+%    ARG_NU_CORRECT
+%        (string, default '-distance 200') the argument passed to NU_CORRECT.
+%        See "nu_correct -help" in a terminal for more infos.
+%
+%    ITER_NU_CORRECT
+%        (integer, default 3) iterate non-uniformity correction / brain masking
+%        for ITER_NU_CORRECT times.
+%
 %    FLAG_SKIP
-%        (boolean,  default 0) If FLAG_SKIP == 1, the brick is not doing
-%        anything, just copying the input to the output. This flag is
-%        useful if you want to get rid of the slice timing correction in
-%        the pipeline. 
+%        (boolean,  default 0) If FLAG_SKIP == 1, the brick is not performing the 
+%        slice timing correction. All other steps (FLAG_HISTORY, SUPPRESS_VOL, etc)
+%        are applied anyway if enabled. This flag is useful if you want to get rid 
+%        of the slice timing correction in the pipeline. 
 %
 %    FOLDER_OUT 
 %        (string, default: path of FILES_IN) If present, all default 
@@ -149,7 +170,12 @@ function [files_in,files_out,opt] = niak_brick_slice_timing(files_in,files_out,o
 % linear model. The influence may be negligible for some design, e.g. long 
 % blocks, and more important for other ones, e.g. event-related. Packages 
 % like fMRIstat include the slice timing in the model, so slice timing 
-% correction may not be necessary in the preprocessing.
+% correction may not be necessary in the preprocessing. The time of frames
+% is stored in a vector time frames, which is saved in a file
+% <BASE FILES_OUT>_extra.mat. If some volumes are suppressed there will
+% also be a variable MASK_SUPPRESS. This is a binary mask with as many entries
+% as the original time series, with a 1 if the frame has been suppressed
+% (scrubbed).
 %
 % NOTE 2:
 % The linear/cubic/spline interpolations were coded by P Bellec, MNI 2008.
@@ -190,7 +216,9 @@ function [files_in,files_out,opt] = niak_brick_slice_timing(files_in,files_out,o
 % _________________________________________________________________________
 % Copyright (c) Pierre Bellec, Sebastien Lavoie-Courchesne
 % Montreal Neurological Institute, 2008-2010
-% Centre de recherche de l'institut de gériatrie de Montréal, 2010.
+% Centre de recherche de l'institut de gériatrie de Montréal, 
+% Department of Computer Science and Operations Research
+% University of Montreal, Québec, Canada, 2010-2013
 % Maintainer : pierre.bellec@criugm.qc.ca
 % See licensing information in the code.
 % Keywords : medical imaging, slice timing, fMRI
@@ -226,8 +254,8 @@ end
 
 %% Options
 gb_name_structure = 'opt';
-gb_list_fields      = {'type_scanner','flag_history','flag_regular','flag_skip','flag_variance','suppress_vol','interpolation','slice_order','type_acquisition','first_number','step'   ,'ref_slice','timing','nb_slices','tr','delay_in_tr','flag_verbose','flag_test','folder_out' };
-gb_list_defaults    = {''            ,0             ,1             ,0          ,1              ,0             ,'spline'       ,[]           ,'manual'          ,'odd'         ,[]       ,[]         ,[]      ,[]         ,[]  ,0            ,1             ,0          ,''           };
+gb_list_fields      = { 'iter_nu_correct' , 'arg_nu_correct' , 'flag_nu_correct' , 'flag_center' , 'type_scanner','flag_history','flag_even_odd','flag_regular','flag_skip','flag_variance','suppress_vol','interpolation','slice_order','type_acquisition','first_number','step'   ,'ref_slice','timing','nb_slices','tr','delay_in_tr','flag_verbose','flag_test','folder_out' };
+gb_list_defaults    = { 3                 , '-distance 200'  , true             , false         , ''            ,0             ,0              ,1             ,0          ,1              ,0             ,'spline'       ,[]           ,'manual'          ,'odd'         ,[]       ,[]         ,[]      ,[]         ,[]  ,0            ,1             ,0          ,''           };
 niak_set_defaults;
 
 %% Use specified values if defined. Use header values otherwise.
@@ -276,35 +304,9 @@ if flag_test == 1
     return
 end
 
-%% Check if the user specified to skip this step
-if flag_skip
-    if flag_verbose
-        msg = sprintf('FLAG_SKIP is on, the brick will just copy the input on the output (yet it may simplify the header for MINC files, see OPT.FLAG_HISTORY and OPT.FLAG_REGULAR). NO SLICE TIMING CORRECTION WAS APPLIED !');
-        fprintf('\n%s\n',msg);
-    end
-    
-    [hdr,vol] = niak_read_vol(files_in);
-    hdr.file_name = files_out;
-    if ~flag_history
-        hdr.info.history = 'niak_slice_timing';
-    end
-    if flag_regular
-        if ismember(hdr.type,{'minc1','minc2'})
-            list_axis = {'xspace','yspace','zspace'};
-            for num_a = 1:3
-                ind = find(ismember(hdr.details.(list_axis{num_a}).varatts,'spacing'));
-                if ~isempty(ind)
-                    hdr.details.(list_axis{num_a}).attvalue{ind} = 'regular__';
-                end
-            end
-        end
-    end
-    niak_write_vol(hdr,vol);
-    return
-end
-
 %% Set up the defaults that necessitate to read the file
 [hdr,vol] = niak_read_vol(files_in);
+hdr = hdr(1);
 [mat,step,start] = niak_hdr_mat2minc(hdr.info.mat);
 
 % Z step
@@ -331,6 +333,8 @@ end
 % TR
 if isempty(opt.tr)
     opt.tr = hdr.info.tr;
+else 
+    hdr.info.tr = opt.tr;
 end
 
 % Number of slices
@@ -350,7 +354,7 @@ if isempty(opt.slice_order)
     switch opt.type_acquisition
         
         case 'manual'
-            if ~exist(opt.slice_order,'var')
+            if ~exist(opt.slice_order,'var') && ~opt.flag_skip
                 error('niak:brick', 'opt: slice_order must be specified when using type_acquisition manual.\n Type ''help niak_brick_slice_timing'' for more info.');
             end
 
@@ -415,10 +419,16 @@ if isempty(opt.slice_order)
 end
 
 % Reference slice
-if isempty(ref_slice)        
+if isempty(ref_slice)&&~opt.flag_skip 
     ref_slice = opt.slice_order(ceil(opt.nb_slices/2));
     opt.ref_slice = ref_slice;
+elseif opt.flag_skip
+    opt.ref_slice = 1;
+    ref_slice = 1;
+    opt.slice_order = 1:opt.nb_slices;
+    slice_order = opt.slice_order;
 end
+time_ref = (find(opt.ref_slice == opt.slice_order)-1) * opt.timing(1); % the time associated with the slice of reference in the first volume
 
 %% Reading data
 if flag_verbose
@@ -437,8 +447,8 @@ if flag_variance
     moy_vol = mean(vol,4);
 end
 
-%% Performing slice timing correction
-if flag_verbose
+%% Verbose what's going on in terms of slice timing
+if flag_verbose&&~flag_skip
     msg = sprintf('Applying slice timing correction...');
     fprintf('\n%s\n',msg);
     fprintf('Volume : %s\n',files_in);
@@ -453,20 +463,54 @@ if flag_verbose
     opt.slice_order
     fprintf('The TR is : %1.2f\n',opt.tr);
     fprintf('The delay in TR is : %1.2f\n',opt.delay_in_tr);
+elseif flag_verbose
+    msg = sprintf('FLAG_SKIP is on, the brick will just copy the input on the output (yet it may apply some other corrections, see OPT.FLAG_XXX). NO SLICE TIMING CORRECTION WAS APPLIED !');
+    fprintf('\n%s\n',msg);
 end
 
+%% Performing slice timing correction
 opt_a.slice_order = opt.slice_order;
 opt_a.timing = opt.timing;
 opt_a.ref_slice = opt.ref_slice;
 opt_a.interpolation = opt.interpolation;
 
-[vol_a,opt_a] = niak_slice_timing(vol,opt_a);
-
-if suppress_vol > 0;
-    vol_a = vol_a(:,:,:,1+suppress_vol:end-suppress_vol);
+if flag_skip
+    vol_a = vol;
+    hdr.extra.time_frames = opt.tr * (0:(size(vol_a,4)-1));
+else
+    [vol_a,opt_a] = niak_slice_timing(vol,opt_a);
+    hdr.extra.time_frames = opt.tr * (0:(size(vol_a,4)-1)) + time_ref;
 end
 
-if flag_variance
+hdr.extra.mask_suppressed = false(size(vol_a,4),1);
+if suppress_vol > 0;
+    hdr.extra.mask_suppressed(1:suppress_vol) = true;
+    hdr.extra.time_frames = hdr.extra.time_frames(~hdr.extra.mask_suppressed);
+    vol_a = vol_a(:,:,:,~hdr.extra.mask_suppressed);
+end
+
+if flag_even_odd
+    if flag_verbose
+        msg = sprintf('Correcting the mean of odd and even slices to a common value ...');
+        fprintf('\n%s\n',msg);
+    end
+    mask_brain = niak_mask_brain(vol_a);
+    for num_t = 1:size(vol_a,4);
+        v_o = vol_a(:,:,1:2:end,num_t);
+        m_o = mean(v_o(mask_brain(:,:,1:2:end)));
+        v_e = vol_a(:,:,2:2:end,num_t);
+        m_e = mean(v_e(mask_brain(:,:,2:2:end)));
+        v_g = vol_a(:,:,:,num_t);
+        m_g = mean(v_g(mask_brain));
+        v_o(mask_brain(:,:,1:2:end)) = v_o(mask_brain(:,:,1:2:end)) * (m_g/m_o);
+        v_e(mask_brain(:,:,2:2:end)) = v_e(mask_brain(:,:,2:2:end)) * (m_g/m_e);
+        v_g(:,:,1:2:end) = v_o ;
+        v_g(:,:,2:2:end) = v_e;
+        vol_a(:,:,:,num_t) = v_g;        
+    end
+end
+
+if flag_variance&&~opt.flag_nu_correct
     if flag_verbose
         msg = sprintf('Preserving the mean and variance of the time series...');
         fprintf('\n%s\n',msg);
@@ -483,13 +527,12 @@ if flag_variance
     end
     vol_a = reshape(vol_a,[nx ny nz nt]);
 end
-
+    
 %% Updating the history and saving output
 if flag_verbose
     msg = sprintf('Writting results...');
     fprintf('\n%s\n',msg);
 end
-hdr = hdr(1);
 hdr.file_name = files_out;
 if flag_history
     opt_hist.command = 'niak_slice_timing';
@@ -510,4 +553,73 @@ if flag_regular
         end
     end
 end
+
+%% Centering the field of view on the brain
+if opt.flag_center
+    if flag_verbose
+       fprintf('\nCentering the field of view on the brain ...\n')
+    end
+    mask = niak_mask_brain(vol_a);
+    ind = find(mask);
+    [cx,cy,cz] = ind2sub (size(mask),ind);
+    avg = mean([cx cy cz],1);
+    hdr.info.mat(1:3,4) = -hdr.info.mat(1:3,1:3)*avg(:);
+end
+
+if opt.flag_nu_correct
+
+    %% Correcting for non-uniformities
+    if flag_verbose
+       fprintf('\nCorrecting for non-uniformities ...\n    Iteration ')
+    end
+    
+    vol_med = median(vol_a,4);    
+    [path_f,name_f,ext_f,flag_z,ext_s] = niak_fileparts(files_out);
+    nu.in.mask = psom_file_tmp(['_mask' ext_s]);
+    nu.in.vol = psom_file_tmp(['_vol' ext_s]);
+    nu.out.vol_nu = psom_file_tmp(['_vol_nu' ext_s]);
+    nu.out.vol_imp = psom_file_tmp(['_vol.imp']);
+    hdr_nu = hdr;
+    hdr_nu.file_name = nu.in.vol;
+    niak_write_vol(hdr_nu,vol_med);
+    hdr_nu.file_name = nu.in.mask;
+    
+    for num_i = 1:opt.iter_nu_correct
+        if opt.flag_verbose
+            fprintf('%i - ',num_i)
+        end
+        
+        % Generate a mask
+        opt_m.fwhm = 2;
+        mask = niak_mask_brain(vol_med,opt_m);
+    
+        % Run nu_correct on the median volume                
+        niak_write_vol(hdr_nu,mask);
+        opt_nu.arg = opt.arg_nu_correct;
+        opt_nu.flag_verbose = false;
+        niak_brick_nu_correct(nu.in,nu.out,opt_nu);
+        [hdr_tmp,vol_med] = niak_read_vol(nu.out.vol_nu);
+    end
+    if opt.flag_verbose
+        fprintf('\n')
+    end
+    
+    % Apply the imp file on every volume
+    instr_ev = ['nu_evaluate -clobber ' nu.in.vol ' ' nu.out.vol_nu ' -mapping ' nu.out.vol_imp];   
+    hdr_nu.file_name = nu.in.vol;
+    for num_v = 1:size(vol_a,4);   
+        niak_progress(num_v,size(vol_a,4),5);
+        niak_write_vol(hdr_nu,vol_a(:,:,:,num_v));
+        [status,msg] = system(instr_ev);
+        if status ~= 0
+            error('The call to NU_CORRECT failed, the error message was: %s',msg)
+        end
+        [hdr_tmp,vol_a(:,:,:,num_v)] = niak_read_vol(nu.out.vol_nu);
+    end    
+    
+    % Clean up
+    psom_clean(nu)
+end
+
+%% Writing outputs
 niak_write_vol(hdr,vol_a);

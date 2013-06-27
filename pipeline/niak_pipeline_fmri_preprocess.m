@@ -47,8 +47,17 @@ function [pipeline,opt] = niak_pipeline_fmri_preprocess(files_in,opt)
 %             kept
 %       
 %   TEMPLATE_FMRI
-%       (string, default '<~niak>/template/roi_aal.mnc.gz') a volume that
+%       (string, default '<~niak>/template/roi_aal_3mm.mnc.gz') a volume that
 %       will be used to resample the fMRI datasets. 
+%
+%   TEMPLATE_T1
+%       (string, default 'mni_icbm152_nlin_sym_09a') the template that 
+%       will be used as a target for the coregistration of the T1 image. 
+%       Available choices: 
+%         'mni_icbm152_nlin_asym_09a' : an adult symmetric template 
+%             (18.5 - 43 y.o., 40 iterations of non-linear fit). 
+%         'mni_icbm152_nlin_sym_09a' : an adult asymmetric template 
+%             (18.5 - 43 y.o., 20 iterations of non-linear fit). 
 %
 %   GRANULARITY
 %       (string, default 'cleanup') the level of granularity of the pipeline.
@@ -97,7 +106,11 @@ function [pipeline,opt] = niak_pipeline_fmri_preprocess(files_in,opt)
 %   PVE
 %       (structure) option for the estimation of partial volume effects of 
 %       tissue types (grey matter, white matter, cerbrospinal fluid) on the 
-%       anatomical scan.
+%       anatomical scan. Additional option:
+%
+%       FLAG_SKIP
+%           (boolean, default false) if the flag is true, do not extract 
+%           PVE maps.
 %
 %   ANAT2FUNC 
 %       (structure) options of NIAK_BRICK_ANAT2FUNC (coregistration 
@@ -165,7 +178,7 @@ function [pipeline,opt] = niak_pipeline_fmri_preprocess(files_in,opt)
 %       in the stereotaxic space).
 %
 %       INTERPOLATION 
-%           (string, default 'tricubic') the spatial interpolation method. 
+%           (string, default 'trilinear') the spatial interpolation method. 
 %           Available options : 'trilinear', 'tricubic', 
 %           'nearest_neighbour','sinc'.
 %
@@ -195,6 +208,9 @@ function [pipeline,opt] = niak_pipeline_fmri_preprocess(files_in,opt)
 %       FLAG_SLOW
 %           (boolean, default true) turn on/off the correction of slow time drifts
 %
+%       FLAG_COMPCOR
+%           (boolean, default false) turn on/off COMPCOR 
+%
 %       FLAG_GSC 
 %           (boolean, default true) turn on/off global signal correction
 %
@@ -210,6 +226,9 @@ function [pipeline,opt] = niak_pipeline_fmri_preprocess(files_in,opt)
 %           (boolean, default 0.95) the % of variance explained by the selected 
 %           PCA components when reducing the dimensionality of motion parameters.
 %
+%       COMPCOR
+%           (structure, default see NIAK_COMPCOR) the OPT argument of NIAK_COMPCOR.
+% 
 %       FLAG_PCA_MOTION 
 %           (boolean, default true) turn on/off the PCA reduction of motion 
 %           parameters.
@@ -269,8 +288,25 @@ function [pipeline,opt] = niak_pipeline_fmri_preprocess(files_in,opt)
 %           all the ROIs found in FILES_IN.MASK
 %
 %       FLAG_SKIP
-%           (boolean, default true) if FLAG_SKIP==1, the brick does not do
-%           anything. 
+%          (boolean, default true) if FLAG_SKIP==1, the brick does not do
+%          anything. 
+%
+%   CIVET 
+%       (structure)If this field is present, NIAK will not process the T1 image, 
+%       but will rather grab the (previously generated) results of the CIVET 
+%       pipeline, i.e. copy/rename them. The following fields need
+%       to be specified :
+%               
+%       FOLDER 
+%           (string) The path of a folder with CIVET results. The field 
+%           ANAT will be ignored in this case.
+%
+%       ID 
+%           (structure, optional) ID.<SUBJECT> is the ID associated with 
+%           SUBJECT in the CIVET results. By default SUBJECT is used.
+%
+%       PREFIX 
+%           (string) The prefix used for the database.
 %
 %   TUNE
 %       (structure) can be used to set different parameters for one or 
@@ -341,7 +377,7 @@ function [pipeline,opt] = niak_pipeline_fmri_preprocess(files_in,opt)
 %      13.  Region growing.
 %           See NIAK_PIPELINE_REGION_GROWING and OPT.REGION_GROWING
 %
-% In addition job the following jobs are performed at the group level:
+% In addition the following jobs are performed at the group level:
 %       1.  Group quality control for motion correction.
 %           See NIAK_BRICK_QC_MOTION_CORRECTION_GROUP and 
 %           OPT.QC_MOTION_CORRECTION_GROUP
@@ -433,18 +469,29 @@ files_in = sub_check_format(files_in); % check the format of FILES_IN
 
 %% OPT
 opt = sub_backwards(opt); % Fiddling with OPT for backwards compatibility
-template_fmri = [gb_niak_path_template filesep 'roi_aal.mnc.gz'];
-list_fields    = { 'target_space' , 'flag_rand' , 'granularity' , 'tune'   , 'flag_verbose' , 'template_fmri' , 'size_output'     , 'folder_out' , 'folder_logs' , 'folder_fmri' , 'folder_anat' , 'folder_qc' , 'folder_intermediate' , 'flag_test' , 'psom'   , 'slice_timing' , 'motion_correction' , 'qc_motion_correction_ind' , 't1_preprocess' , 'pve'   , 'anat2func' , 'qc_coregister' , 'corsica' , 'time_filter' , 'resample_vol' , 'smooth_vol' , 'region_growing' , 'regress_confounds' };
-list_defaults  = { 'stereonl'     , false       , 'cleanup'     , struct() , true           , template_fmri   , 'quality_control' , NaN          , ''            , ''            , ''            , ''          , ''                    , false       , struct() , struct()       , struct()            , struct()                   , struct()        , struct(), struct()    , struct()        , struct()  , struct()      , struct()       , struct()     , struct()         , struct()            };
+template_fmri = [gb_niak_path_template filesep 'roi_aal_3mm.mnc.gz'];
+list_fields    = { 'civet'           , 'target_space' , 'flag_rand' , 'granularity' , 'tune'   , 'flag_verbose' , 'template_fmri' , 'template_t1'              , 'size_output'     , 'folder_out' , 'folder_logs' , 'folder_fmri' , 'folder_anat' , 'folder_qc' , 'folder_intermediate' , 'flag_test' , 'psom'   , 'slice_timing' , 'motion' , 'qc_motion_correction_ind' , 't1_preprocess' , 'pve'   , 'anat2func' , 'qc_coregister' , 'corsica' , 'time_filter' , 'resample_vol' , 'smooth_vol' , 'region_growing' , 'regress_confounds' };
+list_defaults  = { 'gb_niak_omitted' , 'stereonl'     , false       , 'cleanup'     , struct() , true           , template_fmri   , 'mni_icbm152_nlin_sym_09a' , 'quality_control' , NaN          , ''            , ''            , ''            , ''          , ''                    , false       , struct() , struct()       , struct()            , struct()                   , struct()        , struct(), struct()    , struct()        , struct()  , struct()      , struct()       , struct()     , struct()         , struct()            };
 opt = psom_struct_defaults(opt,list_fields,list_defaults);
+opt.folder_out = niak_full_path(opt.folder_out);
 opt.psom.path_logs = [opt.folder_out 'logs' filesep];
+
+if ~ischar(opt.civet)
+    list_fields   = { 'folder' , 'id'   , 'prefix' };
+    list_defaults = { NaN      , struct , NaN      }; 
+    opt.civet = psom_struct_defaults(opt.civet,list_fields,list_defaults);
+end
 
 if ~isfield(opt.region_growing,'flag_skip') % By default, skip the region growing
     opt.region_growing.flag_skip = true;
 end
 
 if ~ismember(opt.size_output,{'quality_control','all'}) % check that the size of outputs is a valid option
-    error(sprintf('%s is an unknown option for OPT.SIZE_OUTPUT. Available options are ''quality_control'', ''all''',opt.size_output))
+    error('%s is an unknown option for OPT.SIZE_OUTPUT. Available options are ''quality_control'', ''all''',opt.size_output)
+end
+
+if ~ismember(opt.template_t1,{'mni_icbm152_nlin_sym_09a','mni_icbm152_nlin_asym_09a'})
+    error('%s is an unkown T1 template space',opt.template_t1)
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -477,10 +524,15 @@ for num_s = 1:length(list_subject)
     end
     opt_ind = sub_tune(opt,subject); % Tune the pipeline parameters for this subject    
     if ~opt.flag_rand
-        opt_ind.rand_seed = double(md5sum(subject,true));
+        opt_ind.rand_seed = double(niak_datahash(subject));
         opt_ind.rand_seed = opt_ind.rand_seed(1:min(length(opt_ind.rand_seed),625));
     end
     
+    if ~ischar(opt.civet)&&~isfield(opt.civet.id,subject)
+        opt_ind.civet.id = opt.civet.id.(subject);
+    elseif ~ischar(opt.civet)
+        opt_ind.civet.id = opt.civet.id.(subject);
+    end
     pipeline_ind = niak_pipeline_fmri_preprocess_ind(files_in.(subject),opt_ind);
 
     %% aggregate jobs
@@ -626,15 +678,15 @@ if opt.flag_verbose
     t1 = clock;
     fprintf('Adding group-level quality control of confound regression (slow time drifts, motion parameters, etc; F-test) ; ');
 end
-list_maps = { 'qc_wm' , 'qc_vent' , 'qc_slow_drift' , 'qc_motion' , 'qc_gse' , 'qc_custom_param' };
+list_maps = { 'qc_wm' , 'qc_vent' , 'qc_slow_drift' , 'qc_high' , 'qc_motion' , 'qc_compcor' , 'qc_gse' , 'qc_custom_param' };
 for num_m = 1:length(list_maps)
     clear job_in job_out job_opt
     job_in.vol  = cell([length(fmri_c) 1]);
     job_in.mask = pipeline.qc_group_coregister_func.files_out.mask_group;
     for num_e = 1:length(fmri_c)
         if strcmp(opt.granularity,'subject')
-            ind = find(ismember(pipeline.(['preproc_' list_subject{num_s}]).opt.list_jobs,['confounds_' label(num_e).name]));
-            tmp = pipeline.(['preproc_' list_subject{num_s}]).opt.pipeline{ind}.files_out;
+            ind = find(ismember(pipeline.(['preproc_' label(num_e).subject]).opt.list_jobs,['confounds_' label(num_e).name]));
+            tmp = pipeline.(['preproc_' label(num_e).subject]).opt.pipeline{ind}.files_out;
         else
             tmp  = pipeline.(['confounds_' label(num_e).name]).files_out;
         end 
@@ -692,8 +744,8 @@ job_in.vol  = cell([length(fmri_c) 1]);
 job_in.mask = pipeline.qc_group_coregister_func.files_out.mask_group;
 for num_e = 1:length(fmri_c)
     if strcmp(opt.granularity,'subject')
-        ind = find(ismember(pipeline.(['preproc_' list_subject{num_s}]).opt.list_jobs,['qc_corsica_var_' label(num_e).name]));
-        job_in.vol{num_e} = pipeline.(['preproc_' list_subject{num_s}]).opt.pipeline{ind}.files_out;
+        ind = find(ismember(pipeline.(['preproc_' label(num_e).subject]).opt.list_jobs,['qc_corsica_var_' label(num_e).name]));
+        job_in.vol{num_e} = pipeline.(['preproc_' label(num_e).subject]).opt.pipeline{ind}.files_out;
     else
         job_in.vol{num_e} = pipeline.(['qc_corsica_var_' label(num_e).name]).files_out;
     end
